@@ -213,7 +213,7 @@ export default {async fetch(req,env){
   if(!db)return new Response("D1 데이터베이스 바인딩(DB)이 필요합니다.",{status:500});
   if(req.method==="POST"&&req.headers.get("origin")!==url.origin)return new Response("요청 출처를 확인해 주세요.",{status:403});
   const me=await currentUser(req,db);
-  if(req.method==="GET"&&path==="/")return landingPage();
+  if(req.method==="GET"&&path==="/"&&!me)return landingPage();
   if(req.method==="GET"&&path==="/login")return authPage(false);
   if(req.method==="GET"&&path==="/signup")return authPage(true);
   if(req.method==="POST"&&path==="/auth/signup"){
