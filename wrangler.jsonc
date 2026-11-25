@@ -5,5 +5,13 @@
   "compatibility_date": "2026-11-25",
   "observability": {
     "enabled": true
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hubstudio11-db",
+      "database_id": "02d0d28f-09e3-4cd7-90eb-06c1de48dc93",
+      "migrations_dir": "migrations"
+    }
+  ]
 }
