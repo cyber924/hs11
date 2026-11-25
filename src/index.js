@@ -65,15 +65,43 @@ async function riskPage(db,me,dealId=""){
  return page("위험 관리",body,me,"risk");
 }
 async function aiAnalyze(req,env,db,me){
- if(!env.GEMINI_API_KEY)return json({error:"AI 기능을 사용하려면 운영자가 Gemini API 키를 등록해야 합니다."},503);
- const b=await req.json();const id=String(b.deal_id||"");const d=await one(db,"SELECT * FROM deals WHERE id=? AND user_id=?",id,me.id);if(!d)return json({error:"프로젝트를 찾을 수 없습니다."},404);
+ if(!env.GEMINI_API_KEY)return json({error:"Gemini API 키가 Worker Secret에 등록되지 않았습니다. GEMINI_API_KEY 설정을 확인해 주세요."},503);
+ let b;
+ try{b=await req.json();}catch{return json({error:"분석 요청 형식이 올바르지 않습니다."},400);}
+ const id=String(b.deal_id||"");
+ const d=await one(db,"SELECT * FROM deals WHERE id=? AND user_id=?",id,me.id);
+ if(!d)return json({error:"프로젝트를 찾을 수 없습니다."},404);
  const prompt="당신은 신중한 프로젝트 금융 및 투자심사 분석 보조자입니다. 아래 제공된 정보만 근거로 한국어 분석을 작성하세요. 정보가 없으면 확인 필요라고 명시하고 수치나 사실을 만들어내지 마세요. 법률·세무·투자 결론을 확정하지 말고 검토 쟁점과 확인 질문을 제시하세요. 프로젝트: "+d.name+" / 분야: "+d.sector+" / 단계: "+d.stage+" / 소재지: "+d.location+" / 스폰서: "+d.sponsor+" / 투자규모: "+d.currency+" "+d.amount+" / 사업설명: "+d.description+" . 출력은 위험요인 5개, 추가 자료 요청 5개, 심사 검토 의견으로 구성하세요.";
- const models=["gemini-2.5-flash","gemini-2.0-flash"];
- let response;
- for(const model of models){response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":env.GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.3}})});if(response.ok)break;}
- if(!response||!response.ok)return json({error:"AI 분석 요청에 실패했습니다. 잠시 후 다시 시도해 주세요."},502);
- const data=await response.json();return json({analysis:data.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"분석 결과가 비어 있습니다."});
+ const models=["gemini-3.8-flash","gemini-3.5-flash-lite"];
+ let lastStatus=0,lastMessage="";
+ for(const model of models){
+  let response;
+  try{
+   response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
+    method:"POST",
+    headers:{"content-type":"application/json","x-goog-api-key":env.GEMINI_API_KEY},
+    body:JSON.stringify({model,input:prompt,generation_config:{thinking_level:"low"}})
+   });
+  }catch(err){
+   lastStatus=0;lastMessage="Google Gemini API에 연결하지 못했습니다: "+String(err?.message||err);
+   continue;
+  }
+  let data={};
+  try{data=await response.json();}catch{}
+  if(response.ok){
+   const output=String(data.output_text||data.outputs?.filter(x=>x.type==="text").map(x=>x.text||"").join("\n")||"").trim();
+   if(output)return json({analysis:output,model});
+   lastStatus=response.status;lastMessage="Gemini API 응답에 분석 텍스트가 없습니다.";
+   continue;
+  }
+  lastStatus=response.status;
+  lastMessage=String(data.error?.message||data.message||"상세 오류 메시지가 반환되지 않았습니다.");
+  if(lastMessage.includes(env.GEMINI_API_KEY))lastMessage=lastMessage.split(env.GEMINI_API_KEY).join("[비공개 키]");
+ }
+ const status=lastStatus>=400&&lastStatus<500?502:503;
+ return json({error:"Gemini 호출 실패. HTTP "+(lastStatus||"연결 오류")+" — "+lastMessage+" (시도 모델: gemini-3.8-flash, gemini-3.5-flash-lite)"},status);
 }
+
 export default {async fetch(req,env){
  const url=new URL(req.url),path=url.pathname,db=env.DB;
  try{
