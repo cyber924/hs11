@@ -89,9 +89,20 @@ async function aiAnalyze(req,env,db,me){
   let data={};
   try{data=await response.json();}catch{}
   if(response.ok){
-   const output=String(data.output_text||data.outputs?.filter(x=>x.type==="text").map(x=>x.text||"").join("\n")||"").trim();
-   if(output)return json({analysis:output,model});
-   lastStatus=response.status;lastMessage="Gemini API 응답에 분석 텍스트가 없습니다.";
+   // REST Interactions API returns final text under steps[].content[].text.
+   const stepText=Array.isArray(data.steps)?data.steps
+    .filter(step=>step&&step.type==="model_output")
+    .flatMap(step=>Array.isArray(step.content)?step.content:[])
+    .filter(part=>part&&(part.type==="text"||typeof part.text==="string"))
+    .map(part=>part.text||"").join("\n"):"";
+   const legacyText=Array.isArray(data.outputs)?data.outputs
+    .filter(item=>item&&(item.type==="text"||typeof item.text==="string"))
+    .map(item=>item.text||"").join("\n"):"";
+   const output=String(data.output_text||stepText||legacyText||"").trim();
+   if(output)return json({analysis:output,model,status:data.status||"completed"});
+   lastStatus=response.status;
+   lastMessage="Gemini API는 HTTP 200을 반환했지만 분석 텍스트가 없습니다. 응답 상태: "+String(data.status||"알 수 없음")+".";
+   if(data.status==="in_progress"&&data.id)lastMessage+=" 비동기 응답 ID: "+String(data.id);
    continue;
   }
   lastStatus=response.status;
