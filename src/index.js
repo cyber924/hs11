@@ -254,7 +254,8 @@ export default {async fetch(req,env){
   if(path==="/analyses"&&req.method==="GET")return analysisList(db,me);
   const download=path.match(/^\/analyses\/([a-f0-9-]+)\/download$/);if(download&&req.method==="GET"){const item=await one(db,"SELECT a.analysis_text,d.name FROM ai_analyses a JOIN deals d ON d.id=a.deal_id WHERE a.id=? AND a.user_id=?",download[1],me.id);if(!item)return new Response("보고서를 찾을 수 없습니다.",{status:404});const filename=String(item.name||"investment-report").replace(/[^a-zA-Z0-9가-힣_-]/g,"_").slice(0,60)||"investment-report";return new Response("# "+item.name+" — 종합 투자심사보고서\n\n"+item.analysis_text,{headers:{"content-type":"text/markdown;charset=utf-8","content-disposition":"attachment; filename*=UTF-8''"+encodeURIComponent(filename+".md"),"cache-control":"no-store"}});}
   if(path.startsWith("/analyses/")&&req.method==="GET")return analysisDetail(db,me,decodeURIComponent(path.slice(10)));
-  if(path==="/api/ai/overview"&&req.method==="POST")return aiOverview(req,env);\n  if(path==="/api/ai/analyze"&&req.method==="POST")return aiAnalyze(req,env,db,me);
+  if(path==="/api/ai/overview"&&req.method==="POST")return aiOverview(req,env);
+  if(path==="/api/ai/analyze"&&req.method==="POST")return aiAnalyze(req,env,db,me);
   return page("페이지 없음","<main class='wrap'><h2>페이지를 찾을 수 없습니다.</h2><a href='/'>대시보드로</a></main>",me);
  }catch(err){console.error("HS11 request error",url.pathname,err?.message);return new Response("요청을 처리하지 못했습니다. 입력값과 데이터베이스 설정을 확인해 주세요.",{status:500,headers:{"content-type":"text/plain;charset=utf-8"}});}
 }};
