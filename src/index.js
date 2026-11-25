@@ -27,7 +27,7 @@ async function currentUser(req,db){
 }
 function authPage(signup,error=""){
  const heading=signup?"계정 만들기":"다시 오셨군요";
- const form="<main class='auth'><span class='eyebrow' style='color:#63816f'>HUB STUDIO 11</span><h1>"+heading+"</h1><p class='muted'>투자·사업분석 업무를 한곳에서 관리하세요.</p>"+(error?"<p class='notice'>"+enc(error)+"</p>":"")+"<form method='post' action='/auth/"+(signup?"signup":"login")+"'>"+(signup?"<div class='field'><label>이름</label><input name='name' required maxlength='50' autocomplete='name'></div>":"")+"<div class='field'><label>이메일</label><input name='email' type='email' required maxlength='254' autocomplete='email'></div><div class='field'><label>비밀번호 · 8~10자</label><input name='password' type='password' required minlength='8' maxlength='10' autocomplete='"+(signup?"new-password":"current-password")+"'></div>"+(signup?"<p class='muted'>비밀번호는 8자 이상 10자 이하로 설정해 주세요. 11자 이상은 허용하지 않습니다.</p>":"")+"<button class='btn' style='width:100%;margin-top:8px'>"+(signup?"회원가입":"로그인")+"</button></form><p class='muted' style='margin-top:16px'>"+(signup?"이미 계정이 있나요? <a href='/login'>로그인</a>":"처음이신가요? <a href='/signup'>회원가입</a>")+"</p></main>";
+ const form="<main class='auth'><span class='eyebrow' style='color:#63816f'>HUB STUDIO 11</span><h1>"+heading+"</h1><p class='muted'>투자·사업분석 업무를 한곳에서 관리하세요.</p>"+(error?"<p class='notice'>"+enc(error)+"</p>":"")+"<form method='post' action='/auth/"+(signup?"signup":"login")+"'>"+(signup?"<div class='field'><label>이름</label><input name='name' required maxlength='50' autocomplete='name'></div>":"")+"<div class='field'><label>이메일</label><input name='email' type='email' required maxlength='254' autocomplete='email'></div><div class='field'><label>비밀번호 · 최대 10자</label><input name='password' type='password' required maxlength='10' autocomplete='"+(signup?"new-password":"current-password")+"'></div>"+(signup?"<p class='muted'>비밀번호는 최대 10자로 설정해 주세요. 11자 이상은 허용하지 않습니다.</p>":"")+"<button class='btn' style='width:100%;margin-top:8px'>"+(signup?"회원가입":"로그인")+"</button></form><p class='muted' style='margin-top:16px'>"+(signup?"이미 계정이 있나요? <a href='/login'>로그인</a>":"처음이신가요? <a href='/signup'>회원가입</a>")+"</p></main>";
  return page(signup?"회원가입":"로그인",form);
 }
 const sectors=["데이터센터","에너지·발전","인프라","부동산","기업금융","산업·제조","기타"];
@@ -85,7 +85,7 @@ export default {async fetch(req,env){
   if(req.method==="POST"&&path==="/auth/signup"){
    const f=await req.formData(),name=String(f.get("name")||"").trim(),email=String(f.get("email")||"").trim().toLowerCase(),pw=String(f.get("password")||"");
    if(!name||name.length>50||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return authPage(true,"이름과 이메일을 확인해 주세요.");
-   if(pw.length<8||pw.length>10)return authPage(true,"비밀번호는 반드시 8~10자로 입력해 주세요.");
+   if(!pw||pw.length>10)return authPage(true,"비밀번호는 최대 10자로 입력해 주세요.");
    if(await one(db,"SELECT id FROM users WHERE email=?",email))return authPage(true,"이미 가입된 이메일입니다.");
    const id=uid(),salt=uid(),hash=await digest(pw,salt);await run(db,"INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,datetime('now'))",id,email,name,salt+":"+hash);
    const sid=uid();await run(db,"INSERT INTO sessions(id,user_id,expires_at) VALUES(?,?,datetime('now','+30 day'))",sid,id);
