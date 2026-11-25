@@ -66,6 +66,38 @@ async function riskPage(db,me,dealId=""){
  return page("위험 관리",body,me,"risk");
 }
 
+
+const riskCategories=["사업","금융","건설","기술","운영","전력·인프라","인허가","시장·수요","계약","환경·사회","기타"];
+function parseAiReport(raw){
+ const text=String(raw||"").trim();
+ const start=text.indexOf("{"),end=text.lastIndexOf("}");
+ if(start>=0&&end>start){
+  try{
+   const obj=JSON.parse(text.slice(start,end+1));
+   const report=String(obj.report_markdown||obj.report||obj.analysis||"").trim();
+   if(report)return {report:report,risks:Array.isArray(obj.risks)?obj.risks:[],document_requests:Array.isArray(obj.document_requests)?obj.document_requests:[],conditions:Array.isArray(obj.conditions)?obj.conditions:[],executive_summary:String(obj.executive_summary||"")};
+  }catch(e){}
+ }
+ return {report:text,risks:[],document_requests:[],conditions:[],executive_summary:""};
+}
+async function saveExtractedRisks(db,me,dealId,analysisId,items){
+ let saved=0,skipped=0;
+ for(const item of items.slice(0,15)){
+  if(!item||typeof item!=="object")continue;
+  const title=String(item.title||"").trim().slice(0,200);
+  if(title.length<4){skipped++;continue;}
+  const duplicate=await one(db,"SELECT id FROM risks WHERE deal_id=? AND user_id=? AND lower(title)=lower(?) LIMIT 1",dealId,me.id,title);
+  if(duplicate){skipped++;continue;}
+  const category=riskCategories.includes(item.category)?item.category:"기타";
+  const likelihood=Math.max(1,Math.min(5,Math.round(Number(item.likelihood)||3)));
+  const impact=Math.max(1,Math.min(5,Math.round(Number(item.impact)||3)));
+  const mitigation=String(item.mitigation||item.response||"대응방안 확인 필요").slice(0,4500);
+  const basis=String(item.basis||"AI 분석 추출 — 원문 확인 필요").slice(0,300);
+  await run(db,"INSERT INTO risks(id,deal_id,user_id,category,title,likelihood,impact,mitigation,owner,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",uid(),dealId,me.id,category,title,likelihood,impact,"[AI 추출 근거] "+basis+"\n[대응방안] "+mitigation,"AI 자동 추출 · 담당자 검토 필요 · 분석 "+analysisId.slice(0,8),new Date().toISOString());
+  saved++;
+ }
+ return {saved:saved,skipped:skipped};
+}
 function reportHtml(source){
  const lines=String(source||"").replace(/\r/g,"").split("\n");
  let out="",list="";
@@ -101,7 +133,7 @@ async function aiAnalyze(req,env,db,me){
  const id=String(b.deal_id||"");
  const d=await one(db,"SELECT * FROM deals WHERE id=? AND user_id=?",id,me.id);
  if(!d)return json({error:"프로젝트를 찾을 수 없습니다."},404);
- const prompt="당신은 기관투자자의 투자심사역을 지원하는 전문 분석가입니다. 반드시 한국어로, 제공된 프로젝트 정보만 근거로 종합 투자심사보고서 초안을 작성하세요. 정보가 없거나 검증되지 않은 사항은 반드시 미제공 또는 확인 필요라고 표시하고 사실, 수치, 계약조건, 시장통계를 만들어내지 마세요. 근거가 있는 사실과 분석상 추론 및 확인 질문을 명확히 구분하세요. 법률·세무·투자 결론을 확정하지 마세요. 프로젝트명: "+d.name+" / 분야: "+d.sector+" / 단계: "+d.stage+" / 소재지: "+d.location+" / 스폰서: "+d.sponsor+" / 투자규모: "+d.currency+" "+d.amount+" / 사업설명: "+d.description+". 보고서 순서: 1. 요약 및 잠정 검토의견 2. 사업 개요와 거래 구조 3. 시장 및 사업성 검토 4. 기술·건설·운영 검토 5. 인허가·법률·환경 검토 6. 금융구조와 상환재원 검토 7. 주요 위험요인 5개(설명, 발생 가능성 1~5, 영향도 1~5, 대응방안) 8. 추가 자료 요청 5개 9. 주요 선결조건 및 약정 검토사항 10. 종합 심사 의견과 후속 조치. 제공되지 않은 내용은 임의로 채우지 말고 확인 필요로 표시하세요.";
+ const prompt="당신은 전문 PF·인프라·부동산 투자심사 분석가입니다. 반드시 한국어로, 입력 정보만 근거로 작성하세요. 미제공 정보는 확인 필요로 표시하고 수치·계약·시장정보를 창작하지 마세요. 최종 답변은 JSON 객체 하나만 출력: {\"executive_summary\":\"잠정의견\",\"report_markdown\":\"# 종합 투자심사보고서\\n...\",\"risks\":[{\"category\":\"사업/금융/건설/기술/운영/전력·인프라/인허가/시장·수요/계약/환경·사회/기타\",\"title\":\"위험요인\",\"likelihood\":3,\"impact\":3,\"mitigation\":\"대응\",\"basis\":\"근거\"}],\"document_requests\":[\"추가자료\"],\"conditions\":[\"선결조건\"]}. risks 최대 10개, 가능성과 영향도는 1~5 정수. 보고서 목차: 1 요약·잠정의견 2 사업개요·거래구조 3 시장·사업성 4 기술·건설·운영 5 인허가·법률·환경 6 금융구조·상환재원 7 주요위험 8 추가자료요청 9 선결조건·약정 10 종합의견·후속조치. 사실과 추론을 구분하고 법률·세무·투자 결론을 확정하지 마세요. 프로젝트: "+d.name+" / 분야: "+d.sector+" / 단계: "+d.stage+" / 소재지: "+d.location+" / 스폰서: "+d.sponsor+" / 규모: "+d.currency+" "+d.amount+" / 설명: "+d.description+". 미제공 항목은 확인 필요로 표시하세요.";
  const models=["gemini-3.8-flash","gemini-3.5-flash"];
  let lastStatus=0,lastMessage="";
  for(const model of models){
@@ -129,7 +161,7 @@ async function aiAnalyze(req,env,db,me){
     .filter(item=>item&&(item.type==="text"||typeof item.text==="string"))
     .map(item=>item.text||"").join("\n"):"";
    const output=String(data.output_text||stepText||legacyText||"").trim();
-   if(output){const analysisId=uid(),createdAt=new Date().toISOString();await run(db,"INSERT INTO ai_analyses(id,user_id,deal_id,model,analysis_text,report_json,created_at) VALUES(?,?,?,?,?,?,?)",analysisId,me.id,id,model,output,JSON.stringify({format:"markdown",version:1}),createdAt);return json({analysis:output,analysis_id:analysisId,model,status:data.status||"completed"});}
+   if(output){const parsed=parseAiReport(output),analysisId=uid(),createdAt=new Date().toISOString();await run(db,"INSERT INTO ai_analyses(id,user_id,deal_id,model,analysis_text,report_json,created_at) VALUES(?,?,?,?,?,?,?)",analysisId,me.id,id,model,parsed.report,JSON.stringify({format:"markdown",version:1,executive_summary:parsed.executive_summary,document_requests:parsed.document_requests,conditions:parsed.conditions}),createdAt);const riskResult=await saveExtractedRisks(db,me,id,analysisId,parsed.risks);return json({analysis:parsed.report,analysis_id:analysisId,model,status:data.status||"completed",risks_saved:riskResult.saved,risks_skipped:riskResult.skipped});}
    lastStatus=response.status;
    lastMessage="Gemini API는 HTTP 200을 반환했지만 분석 텍스트가 없습니다. 응답 상태: "+String(data.status||"알 수 없음")+".";
    if(data.status==="in_progress"&&data.id)lastMessage+=" 비동기 응답 ID: "+String(data.id);
