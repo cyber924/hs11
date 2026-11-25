@@ -7,7 +7,7 @@ const json = (data,status=200) => new Response(JSON.stringify(data),{status,head
 const page = (title,body,me=null,active="") => new Response([
 "<!doctype html><html lang='ko'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#174c3d'><title>",enc(title)," · 허브스튜디오 11</title><style>",css,"</style></head><body>",
 "<header class='top'><a class='brand' href='/'> <b>11</b> 허브스튜디오</a><nav class='nav'>",
-me ? "<a class='"+(active==="home"?"active":"")+"' href='/'>대시보드</a><a class='"+(active==="deals"?"active":"")+"' href='/deals'>투자 딜</a><a class='"+(active==="new"?"active":"")+"' href='/deals/new'>딜 등록</a><a class='"+(active==="risk"?"active":"")+"' href='/risks'>위험 관리</a><a href='/logout'>로그아웃</a>" : "<a href='/login'>로그인</a><a class='active' href='/signup'>회원가입</a>",
+me ? "<a class='"+(active==="home"?"active":"")+"' href='/'>대시보드</a><a class='"+(active==="deals"?"active":"")+"' href='/deals'>투자 딜</a><a class='"+(active==="new"?"active":"")+"' href='/deals/new'>딜 등록</a><a class='"+(active==="analyses"?"active":"")+"' href='/analyses'>AI 분석 이력</a><a class='"+(active==="risk"?"active":"")+"' href='/risks'>위험 관리</a><a href='/logout'>로그아웃</a>" : "<a href='/login'>로그인</a><a class='active' href='/signup'>회원가입</a>",
 "</nav></header>",body,"<footer class='footer'>허브스튜디오 11 · 투자와 사업의 판단을 더 명확하게</footer></body></html>"
 ].join(""),{headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store"}});
 const one = async (db,sql,...v) => db.prepare(sql).bind(...v).first();
