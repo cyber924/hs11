@@ -18,7 +18,7 @@ const cookie = req => (req.headers.get("cookie")||"").split(";").map(x=>x.trim()
 const setCookie = (id,age) => "hs11_session="+id+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+age;
 async function digest(password,salt){
  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);
- const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations:150000,hash:"SHA-256"},key,256);
+ const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations:100000,hash:"SHA-256"},key,256);
  return Array.from(new Uint8Array(bits)).map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 async function currentUser(req,db){
